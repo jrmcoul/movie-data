@@ -1,16 +1,17 @@
 const puppeteer = require('puppeteer');
 
-(async () => {
+
+
+const scrapeSites = async function scrapeSites(searchTerm) {
 	const browser = await puppeteer.launch();
 	const page = await browser.newPage();
 
-	let searchTerm = 'fantastic beasts'
 	searchTerm = searchTerm.trim().toLowerCase(); //searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1).toLowerCase();
 	urlRT = 'https://www.rottentomatoes.com/search/?search=' + searchTerm.replace(/ /g, "%20");
 	urlBO = 'https://www.boxofficemojo.com/search/?q=' + searchTerm.replace(/ /g, "%20");
 
-	console.log(urlRT);
-	console.log(urlBO);
+	// console.log(urlRT);
+	// console.log(urlBO);
 	// Navigate to search results page
 	await Promise.all([
   		page.waitForNavigation({waitUntil: 'networkidle0'}), // The promise resolves after navigation has finished
@@ -45,7 +46,7 @@ const puppeteer = require('puppeteer');
    	let yearArr = [];
 
 	while(pageNum <= totalPages) {
-		console.log(pageNum);
+		console.log('RT Page #' + pageNum);
 	    // Get all RT scores
 		scoreArr = scoreArr.concat(await page.evaluate(
 	      () => Array.from(
@@ -61,15 +62,6 @@ const puppeteer = require('puppeteer');
 	        element => element.textContent.toLowerCase()
 	      )
 	    ));
-
-	    // Get all links to movie pages
-	    linkArr = linkArr.concat(await page.evaluate(
-	      () => Array.from(
-	        document.querySelectorAll('ul.results_ul span.bold a.articleLink'),
-	        element => element.getAttribute('href')
-	      )
-	    ));
-
 
 		// Get all movie years
 		yearArr = yearArr.concat(await page.evaluate(
@@ -88,12 +80,7 @@ const puppeteer = require('puppeteer');
 		pageNum += 1
 	}
 
-	// yearArr = yearArr.concat(await page.evaluate(
- //      () => Array.from(
- //        document.querySelectorAll('ul.results_ul span.bold a.articleLink'),
- //        element => element.parentNode.nextSibling.textContent.trim() //!== null ? element.getAttribute('href') : 'n/a'
- //      )
- //    ));
+	console.log('RT scraping complete!');
 
 	// Cleaning up data
 	const scores = [];
@@ -145,40 +132,65 @@ const puppeteer = require('puppeteer');
 	while(start <= allEntries.length - 8 && allEntries[start].indexOf(searchTerm) > -1) {
 		table.push(allEntries.slice(start,start+8));
 		start += 8;
-		// console.log(table);
 	}
-	console.log(table);
+	// console.log(table);
 
+	const box = [];
+	let foundFlag;
+	let entry;
+	for(let mov = 0; mov < scores.length; mov++) {
+		foundFlag = false;
+		for(let tab = 0; tab < table.length; tab++) {
+			entry = table[tab];
+			// console.log(years[mov].slice(1,5));
+			// console.log('-->' + entry[6].slice(entry[6].length - 4, entry[6].length))
+			if((years[mov].slice(1,5) === entry[6].slice(entry[6].length - 4, entry[6].length)
+				|| (parseInt(years[mov].slice(1,5)) - 1) + '' === entry[6].slice(entry[6].length - 4, entry[6].length)
+				|| (parseInt(years[mov].slice(1,5)) + 1) + '' === entry[6].slice(entry[6].length - 4, entry[6].length))
+				&& entry[0].indexOf(titles[mov]) > -1) {
+				box.push(entry[2]);
+				foundFlag = true;
+				break;
+			}
+		}
+		if(!foundFlag){
+			box.push('n/a');
+		}
+	}
+	// BUG!! it looks like some movies have a year that doesn't match release date
 
-  //   // Navigate to each movie page and extract box office numbers
-  //   let tempBox;
-  //   const box = [];
-  //   const finalArr = [];
-  //   for(let i = 0; i < scores.length; i++) {
-		// await page.waitFor(500)
-  //   	await Promise.all([
-  // 			page.waitForNavigation({waitUntil: 'networkidle0'}), // The promise resolves after navigation has finished
-  // 			page.goto('https://www.rottentomatoes.com' + links[i]), // Clicking the link will indirectly cause a navigation
-		// ]);
-		// let tempMetaArr = await page.evaluate(
-  // 			() => Array.from(
-  //   			document.querySelectorAll('div.meta-value'),
-  //   			element => element.textContent
-  // 			)
-		// );
-		// tempBox = tempMetaArr.filter((value) => {return value[0] === '$'});
-		// box.push((tempBox !== undefined && tempBox.length !== 0) ? tempBox[0] : 'n/a');
-		// console.log((i + 1) + " out of " + scores.length + " complete!");
-  //   }
+	const resultObj = {
+		'titles': [],
+		'scores': [],
+		'box': []
+	}
 
-    console.log(scores);
-    console.log(titles);
-    console.log(years);
-    // console.log(box);
-	console.log('step 2');
-
-	await page.screenshot({path: 'example.png'});
-
+	for(let i = 0; i < scores.length; i++) {
+		if(box[i] !== 'n/a') {
+			resultObj.titles.push(titles[i] + ' ' + years[i]);
+			resultObj.scores.push(scores[i]);
+			resultObj.box.push(box[i]);
+			console.log(titles[i] + ' has a rating of ' + scores[i] + ' and took home ' + box[i] + ' at the box office.')
+		}
+	}
 
 	await browser.close();
-})();
+
+	return resultObj;
+
+	console.log(resultObj)
+    // console.log(scores);
+    // console.log(titles);
+    // console.log(years);
+    // console.log(box);
+	console.log('step 2');	
+};
+
+async function printData() {
+	console.log(await scrapeSites('amazing'));
+}
+
+printData();
+
+
+
